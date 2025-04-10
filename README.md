@@ -1,7 +1,7 @@
 ## Hi there 👋
 
 <!--
-**thefruitbasketco/thefruitbasketco** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+**SM-fruits-and-vegetables/SM-fruits-and-vegetables** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
 Here are some ideas to get you started:
 

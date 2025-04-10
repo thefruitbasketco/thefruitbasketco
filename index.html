@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Table with JSON Features</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .suggestions {
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            max-height: 150px;
+            overflow-y: auto;
+            width: 300px;
+            display: none;
+        }
+
+        .suggestion {
+            padding: 5px;
+            cursor: pointer;
+        }
+
+        .suggestion.selected {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-5">
+        <h2>Form</h2>
+        <div class="mb-3">
+            <label for="date" class="form-label">Date</label>
+            <input type="date" class="form-control" id="date">
+        </div>
+        <div class="mb-3">
+            <label for="name" class="form-label">Name</label>
+            <input type="text" class="form-control" id="name">
+        </div>
+        <div class="mb-3">
+            <label for="srno" class="form-label">Sr No</label>
+            <input type="text" class="form-control" id="srno">
+        </div>
+        <h4>Table</h4>
+        <div class="row mb-3">
+            <div class="col">
+                <input type="text" id="description" class="form-control" placeholder="Description" autocomplete="off">
+                <div id="suggestions" class="suggestions"></div>
+            </div>
+            <div class="col">
+                <input type="text" id="weight" class="form-control" placeholder="Weight" oninput="suggestAmount()" autocomplete="off">
+            </div>
+            <div class="col">
+                <input type="text" id="rate" class="form-control" placeholder="Rate" oninput="suggestAmount()" autocomplete="off">
+            </div>
+            <div class="col">
+                <input type="text" id="amount" class="form-control" placeholder="Amount" autocomplete="off">
+            </div>
+            <div class="col">
+                <button class="btn btn-primary" onclick="addRow()">Add</button>
+            </div>
+        </div>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>S.No</th>
+                    <th>Description</th>
+                    <th>Weight</th>
+                    <th>Rate</th>
+                    <th>Amount</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+        <div class="mb-3">
+            <textarea id="jsonInput" class="form-control" placeholder="Paste JSON data here..."></textarea>
+        </div>
+        <h4>Total and Amount Received</h4>
+        <div class="row mb-3">
+            <div class="col">
+                <label for="totalAmount" class="form-label">Total Amount</label>
+                <input type="text" id="totalAmount" class="form-control" placeholder="Total Amount">
+            </div>
+            <div class="col">
+                <label for="receivedAmount" class="form-label">Amount Received</label>
+                <input type="text" id="receivedAmount" class="form-control" placeholder="Amount Received">
+            </div>
+        </div>
+        <button class="btn btn-success" onclick="saveData()">Generate Invoice</button>
+        <button class="btn btn-info" onclick="loadData()">Load Data from JSON</button>
+        <button class="btn btn-secondary" onclick="copyToClipboard()">Copy JSON Data</button>
+    </div>
+
+    <script>
+        function suggestAmount() {
+            let weight = document.getElementById("weight").value;
+            let rate = document.getElementById("rate").value;
+            let amountField = document.getElementById("amount");
+
+            let weightValue = parseFloat(weight.match(/\d+(\.\d+)?/));
+            let rateValue = parseFloat(rate);
+
+            if (!isNaN(weightValue) && !isNaN(rateValue)) {
+                amountField.value = (weightValue * rateValue).toFixed(0);
+            } else {
+                amountField.placeholder = "Amount";
+                amountField.value = "";
+            }
+        }
+
+        function addRow() {
+            let description = document.getElementById("description").value.trim();
+            description = description.charAt(0).toUpperCase() + description.slice(1);
+
+            let weight = document.getElementById("weight").value;
+            let rate = document.getElementById("rate").value;
+            let amount = document.getElementById("amount").value;
+
+            if (!amount) {
+                if (!isNaN(weight) && !isNaN(rate) && weight && rate) {
+                    amount = (weight * rate).toFixed(0);
+                } else {
+                    alert("Invalid weight or rate.");
+                    return;
+                }
+            }
+
+            let table = document.getElementById("tableBody");
+            let row = table.insertRow();
+            let sNo = table.rows.length + 1; // Calculate serial number
+            row.innerHTML = `
+                <td>${sNo}</td>
+                <td>${description}</td>
+                <td>${weight}</td>
+                <td>${rate}</td>
+                <td>${amount}</td>
+                <td>
+                    <button class="btn btn-warning btn-sm" onclick="editRow(this)">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteRow(this)">Delete</button>
+                </td>
+            `;
+            clearFields();
+            updateSerialNumbers(); // Update serial numbers after addition
+            updateTotalAmount();
+        }
+
+        function clearFields() {
+            document.getElementById("description").value = "";
+            document.getElementById("weight").value = "";
+            document.getElementById("rate").value = "";
+            document.getElementById("amount").value = "";
+            document.getElementById("amount").placeholder = "";
+        }
+
+        function editRow(button) {
+            let row = button.parentNode.parentNode;
+            document.getElementById("description").value = row.cells[1].innerHTML;
+            document.getElementById("weight").value = row.cells[2].innerHTML;
+            document.getElementById("rate").value = row.cells[3].innerHTML;
+            document.getElementById("amount").value = row.cells[4].innerHTML;
+            row.remove();
+            updateSerialNumbers(); // Update serial numbers after deletion
+            updateTotalAmount();
+        }
+
+        function deleteRow(button) {
+            button.parentNode.parentNode.remove();
+            updateSerialNumbers(); // Update serial numbers after deletion
+            updateTotalAmount();
+        }
+
+        function updateSerialNumbers() {
+            let table = document.getElementById("tableBody");
+            let rows = table.rows;
+            for (let i = 0; i < rows.length; i++) {
+                rows[i].cells[0].innerHTML = i + 1;
+            }
+        }
+
+        function updateTotalAmount() {
+            let rows = document.getElementById("tableBody").rows;
+            let total = 0;
+            for (let i = 0; i < rows.length; i++) {
+                total += parseFloat(rows[i].cells[4].innerHTML);
+            }
+            document.getElementById("totalAmount").value = total.toFixed(0);
+        }
+
+        function saveData() {
+            let rows = document.getElementById("tableBody").rows;
+            let tableData = [];
+            for (let i = 0; i < rows.length; i++) {
+                let row = rows[i].cells;
+                tableData.push({
+                    description: row[1].innerHTML,
+                    weight: row[2].innerHTML,
+                    rate: row[3].innerHTML,
+                    amount: row[4].innerHTML
+                });
+            }
+
+            let formData = {
+                srno: document.getElementById("srno").value,
+                date: document.getElementById("date").value,
+                name: document.getElementById("name").value,
+                totalAmount: document.getElementById("totalAmount").value,
+                receivedAmount: document.getElementById("receivedAmount").value,
+                table: tableData
+            };
+
+            let jsonData = JSON.stringify(formData);
+            localStorage.setItem("formData", jsonData);
+            window.location.href = "invoiceBill.html"; // Redirect to another page
+        }
+
+        function loadData() {
+            let jsonInput = document.getElementById("jsonInput").value;
+            try {
+                let formData = JSON.parse(jsonInput);
+                
+                document.getElementById("srno").value = formData.srno;
+                document.getElementById("date").value = formData.date;
+                document.getElementById("name").value = formData.name;
+                document.getElementById("totalAmount").value = formData.totalAmount;
+                document.getElementById("receivedAmount").value = formData.receivedAmount;
+
+                document.getElementById("tableBody").innerHTML = "";
+                formData.table.forEach((item, index) => {
+                    let table = document.getElementById("tableBody");
+                    let row = table.insertRow();
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${item.description}</td>
+                        <td>${item.weight}</td>
+                        <td>${item.rate}</td>
+                        <td>${item.amount}</td>
+                        <td>
+                            <button class="btn btn-warning btn-sm" onclick="editRow(this)">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteRow(this)">Delete</button>
+                        </td>
+                    `;
+                });
+                updateSerialNumbers(); // Ensure serial numbers are correct
+                updateTotalAmount();
+            } catch (error) {
+                alert("Invalid JSON data.");
+            }
+        }
+
+        function copyToClipboard() {
+            let rows = document.getElementById("tableBody").rows;
+            let tableData = [];
+            for (let i = 0; i < rows.length; i++) {
+                let row = rows[i].cells;
+                tableData.push({
+                    description: row[1].innerHTML,
+                    weight: row[2].innerHTML,
+                    rate: row[3].innerHTML,
+                    amount: row[4].innerHTML
+                });
+            }
+
+            let formData = {
+                srno: document.getElementById("srno").value,
+                date: document.getElementById("date").value,
+                name: document.getElementById("name").value,
+                totalAmount: document.getElementById("totalAmount").value,
+                receivedAmount: document.getElementById("receivedAmount").value,
+                table: tableData
+            };
+
+            let jsonData = JSON.stringify(formData);
+            navigator.clipboard.writeText(jsonData).then(() => {
+                alert("Form data copied to clipboard!");
+            }).catch(err => {
+                alert("Failed to copy data.");
+            });
+        }
+
+        const predefinedItems = [
+            "Apple",
+            "Pineapple",
+            "Banana",
+            "Papaya",
+            "Pomegranate",
+            "Strawberry",
+            "Blueberry",
+            "Chiku",
+            "Kiwi",
+            "Watermelon",
+            "Dragonfruit",
+            "Black Grapes",
+            "Avocado",
+            "Malta Orange",
+            "Orange",
+            "Lichi",
+            "Mango",
+            "Muskmelon",
+            "Green Apple",
+            "Raw Guava"
+        ];
+
+
+        let currentFocus = -1;
+
+        document.getElementById('description').addEventListener('input', function(event) {
+            const query = event.target.value.toLowerCase();
+            const suggestionsContainer = document.getElementById('suggestions');
+            suggestionsContainer.innerHTML = '';
+
+            if (query.length === 0) {
+                suggestionsContainer.style.display = 'none';
+                currentFocus = -1;
+                return;
+            }
+
+            const filteredSuggestions = predefinedItems
+                .filter(item => item.toLowerCase().includes(query))
+                .slice(0, 10); // Limit to 10 suggestions
+
+            if (filteredSuggestions.length > 0) {
+                filteredSuggestions.forEach(suggestion => {
+                    const div = document.createElement('div');
+                    div.className = 'suggestion';
+                    div.textContent = suggestion;
+                    div.addEventListener('click', function() {
+                        event.target.value = suggestion;
+                        suggestionsContainer.style.display = 'none';
+                    });
+                    suggestionsContainer.appendChild(div);
+                });
+                suggestionsContainer.style.display = 'block';
+                highlightSuggestion(0);
+            } else {
+                suggestionsContainer.style.display = 'none';
+                currentFocus = -1;
+            }
+        });
+
+        document.getElementById('description').addEventListener('keydown', function(event) {
+            const suggestionsContainer = document.getElementById('suggestions');
+            const suggestions = suggestionsContainer.getElementsByClassName('suggestion');
+
+            switch (event.keyCode) {
+                case 40: // Down arrow
+                    event.preventDefault();
+                    highlightSuggestion(currentFocus + 1);
+                    break;
+                case 38: // Up arrow
+                    event.preventDefault();
+                    highlightSuggestion(currentFocus - 1);
+                    break;
+                case 13: // Enter
+                    event.preventDefault();
+                    if (currentFocus >= 0 && currentFocus < suggestions.length) {
+                        document.getElementById('description').value = suggestions[currentFocus].textContent;
+                        suggestionsContainer.style.display = 'none';
+                    }
+                    break;
+            }
+        });
+
+        function highlightSuggestion(n) {
+            const suggestions = document.querySelectorAll('.suggestion');
+            if (!suggestions) return;
+
+            // Remove any 'selected' class
+            removeSelectedClass();
+
+            if (n >= suggestions.length) {
+                n = 0;
+            } else if (n < 0) {
+                n = suggestions.length - 1;
+            }
+
+            suggestions[n].classList.add('selected');
+            currentFocus = n;
+        }
+
+        function removeSelectedClass() {
+            const suggestions = document.querySelectorAll('.suggestion');
+            for (let i = 0; i < suggestions.length; i++) {
+                suggestions[i].classList.remove('selected');
+            }
+        }
+
+        // Hide suggestions when clicking outside the input field
+        document.addEventListener('click', function(event) {
+            if (!event.target.matches('#description')) {
+                document.getElementById('suggestions').style.display = 'none';
+                currentFocus = -1;
+            }
+        });
+        document.getElementById('description').addEventListener('blur', function() {
+            document.getElementById('suggestions').style.display = 'none';
+            currentFocus = -1;
+        });
+    </script>
+</body>
+</html>
